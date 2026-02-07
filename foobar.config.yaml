@@ -1,0 +1,13 @@
+version: "1"
+
+settings:
+  log_retention_days: 7
+
+processes:
+  - name: "echo-service"
+    command: "while true; do echo 'Hello from echo-service'; sleep 2; done"
+    tags: ["test", "bash"]
+
+  - name: "error-service"
+    command: "while true; do echo 'Something went wrong'; sleep 5; echo 'Just kidding'; sleep 1; done"
+    tags: ["test", "bash"]
