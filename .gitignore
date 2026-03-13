@@ -1,0 +1,37 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+foobar
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+# Temporary files and backup files
+*~
+*.swp
+*.swo
+.DS_Store
+
+# Local configuration files that shouldn't be committed
+foobar.config.json
+
+# IDE specific folders
+.idea/
+.vscode/
+
+# Build artifacts directory
+dist/
+build/
