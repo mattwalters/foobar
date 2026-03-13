@@ -24,3 +24,7 @@ clean: stop
 # Run the test suite
 test:
 	go test -v ./...
+
+# Run the test suite without using the Go test cache
+test-nocache:
+	go test -count=1 -v ./...

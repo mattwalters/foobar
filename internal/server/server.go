@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"mattwalters/foobar/internal/process"
 	"mattwalters/foobar/internal/store"
@@ -59,7 +60,8 @@ func (s *Server) Start() error {
 
 	go func() {
 		// Serve will block, so we run it in a goroutine
-		if err := http.Serve(s.listener, mux); err != nil && err != http.ErrServerClosed {
+		err := http.Serve(s.listener, mux)
+		if err != nil && err != http.ErrServerClosed && !strings.Contains(err.Error(), "use of closed network connection") {
 			fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		}
 	}()
