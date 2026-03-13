@@ -31,7 +31,7 @@ func TestStore_InsertAndGet(t *testing.T) {
 	}
 
 	// Retrieve logs for 'web' process
-	logs, err := db.GetRecentLogs("web", 10)
+	logs, err := db.GetRecentLogs([]string{"web"}, 10, time.Time{}, time.Time{})
 	if err != nil {
 		t.Fatalf("failed to get recent logs: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestStore_InsertAndGet(t *testing.T) {
 	}
 
 	// Limit test
-	logsLimited, err := db.GetRecentLogs("web", 2)
+	logsLimited, err := db.GetRecentLogs([]string{"web"}, 2, time.Time{}, time.Time{})
 	if err != nil {
 		t.Fatalf("failed to get recent logs with limit: %v", err)
 	}

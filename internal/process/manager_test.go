@@ -42,7 +42,7 @@ func TestManagerStartAndStop(t *testing.T) {
 	// Give it time to generate some logs
 	time.Sleep(300 * time.Millisecond)
 
-	logs, err := db.GetRecentLogs("test_proc", 10)
+	logs, err := db.GetRecentLogs([]string{"test_proc"}, 10, time.Time{}, time.Time{})
 	if err != nil {
 		t.Fatalf("failed to get logs: %v", err)
 	}

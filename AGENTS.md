@@ -10,7 +10,11 @@ It runs as a local background daemon that manages child processes (e.g., node se
 
 **For a full dive into the vision, roadmap, and monetization strategy, please read the `productplan.md` in the root of the repository.**
 
-## 2. Core Technologies
+## 2. Terminology
+
+- **Channel**: A stream or process that we want to monitor. Previously referred to simply as "processes", but "channel" is the official term when discussing the UI's log feeds (e.g., filtering, muting, soloing a channel).
+
+## 3. Core Technologies
 
 - **Language**: Go (`golang`)
 - **CLI Framework**: Cobra (`github.com/spf13/cobra`)

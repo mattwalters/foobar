@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"mattwalters/foobar/internal/logger"
 	"mattwalters/foobar/internal/process"
@@ -120,29 +121,43 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	processName := r.URL.Query().Get("process")
-	if processName == "" {
-		http.Error(w, "missing 'process' parameter", http.StatusBadRequest)
-		return
-	}
-
 	limitStr := r.URL.Query().Get("limit")
 	limit := 100 // default
 	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
 	}
 
-	if processName != logger.SystemProcessName {
-		_, ok := s.manager.GetProcess(processName)
-		if !ok {
-			http.Error(w, "process not found", http.StatusNotFound)
-			return
+	// Allow passing ?channel=web&channel=api
+	// If empty, we will pass an empty slice which returns all logs
+	channels := r.URL.Query()["channel"]
+	
+	// Backwards compatibility with ?process=
+	if len(channels) == 0 {
+		if p := r.URL.Query().Get("process"); p != "" {
+			channels = append(channels, p)
 		}
 	}
 
-	logs, err := s.db.GetRecentLogs(processName, limit)
+	// For MVP, if specific channels are requested, we should ensure they exist.
+	// But to keep Interleaving simple, we just pass the slice directly to DB.
+	// We'll trust the DB query IN clause to just return 0 rows for bad channel names.
+
+	// Parse time-based pagination
+	var beforeTime, afterTime time.Time
+	if bt := r.URL.Query().Get("before_time"); bt != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, bt); err == nil {
+			beforeTime = parsed
+		}
+	}
+	if at := r.URL.Query().Get("after_time"); at != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, at); err == nil {
+			afterTime = parsed
+		}
+	}
+
+	logs, err := s.db.GetRecentLogs(channels, limit, beforeTime, afterTime)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to query logs: %v", err), http.StatusInternalServerError)
 		return

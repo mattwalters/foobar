@@ -1,4 +1,4 @@
-.PHONY: build dev clean stop
+.PHONY: build dev clean stop test test-nocache lint
 
 # Build the foobar binary into the bin/ directory
 build:
@@ -28,3 +28,13 @@ test:
 # Run the test suite without using the Go test cache
 test-nocache:
 	go test -count=1 -v ./...
+
+# Run linters on the codebase
+lint:
+	go vet ./...
+	go fmt ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run; \
+	else \
+		echo "golangci-lint not installed, skipping advanced linting."; \
+	fi

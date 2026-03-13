@@ -68,26 +68,63 @@ func (s *Store) InsertLog(entry LogEntry) error {
 	return err
 }
 
-// GetRecentLogs retrieves the N most recent logs for a given process, returned chronologically
-func (s *Store) GetRecentLogs(processAlias string, limit int) ([]LogEntry, error) {
+// GetRecentLogs retrieves the N most recent logs for a given set of processes.
+// If processes is empty, it returns logs across all managed processes.
+func (s *Store) GetRecentLogs(processes []string, limit int, beforeTime, afterTime time.Time) ([]LogEntry, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 
+	whereClause := ""
+	var args []interface{}
+	
+	// Dynamically build the IN clause if specific processes are requested
+	if len(processes) > 0 {
+		whereClause = "WHERE process IN ("
+		for i, p := range processes {
+			if i > 0 {
+				whereClause += ", "
+			}
+			whereClause += "?"
+			args = append(args, p)
+		}
+		whereClause += ")"
+	}
+	
+	if !beforeTime.IsZero() {
+		if whereClause == "" {
+			whereClause = "WHERE timestamp < ?"
+		} else {
+			whereClause += " AND timestamp < ?"
+		}
+		args = append(args, beforeTime)
+	}
+
+	if !afterTime.IsZero() {
+		if whereClause == "" {
+			whereClause = "WHERE timestamp > ?"
+		} else {
+			whereClause += " AND timestamp > ?"
+		}
+		args = append(args, afterTime)
+	}
+
+	args = append(args, limit)
+
 	// Subquery gets the N most recent logs (ordered by newest first)
 	// Outer query reverses them so the client receives them sequentially (oldest to newest)
-	query := `
+	query := fmt.Sprintf(`
 		SELECT timestamp, process, stream, message, COALESCE(context::VARCHAR, '{}') as context
 		FROM (
 			SELECT * FROM logs
-			WHERE process = ?
+			%s
 			ORDER BY timestamp DESC
 			LIMIT ?
 		)
 		ORDER BY timestamp ASC
-	`
+	`, whereClause)
 
-	rows, err := s.db.Query(query, processAlias, limit)
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
