@@ -1,0 +1,10 @@
+{
+    "processes": {
+        "ping_loop": {
+            "command": "./dummy.sh ping"
+        },
+        "date_loop": {
+            "command": "./dummy.sh date"
+        }
+    }
+}
