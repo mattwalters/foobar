@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
-	"time"
+	"path/filepath"
+	"time" // Keep time because time.Sleep is used
 
 	"mattwalters/foobar/internal/config"
+	"mattwalters/foobar/internal/logger"
 	"mattwalters/foobar/internal/process"
 	"mattwalters/foobar/internal/server"
 	"mattwalters/foobar/internal/store"
@@ -24,15 +27,23 @@ var rootCmd = &cobra.Command{
 	Short: "foobar is a command-line process manager and log viewer",
 	Long:  `foobar is a local development hub that manages background processes, captures structured logs, and displays them via a terminal UI.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// 1. Check if server is running by dialing the socket
+		// Initialize System Logger for the launcher (without DB hook)
+		if err := logger.Init("foobar-system.log", nil, slog.LevelInfo); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to init logger: %v\n", err)
+			os.Exit(1)
+		}
+
+		// 3. Check if server is running by dialing the socket
 		conn, err := net.Dial("unix", socketPath)
 		if err != nil {
 			// Server not running, spin it up in the background
-			fmt.Println("Starting background daemon...")
+			slog.Info("Starting background daemon...")
 			serverCmd := exec.Command(os.Args[0], "server")
+			// Pass stderr so we can see why it crashes on startup before slog is active
+			serverCmd.Stderr = os.Stderr
 			// Detach from current process group (simple backgrounding)
 			if err := serverCmd.Start(); err != nil {
-				fmt.Fprintf(os.Stderr, "failed to start background daemon: %v\n", err)
+				slog.Error("failed to start background daemon", "error", err)
 				os.Exit(1)
 			}
 			
@@ -49,9 +60,9 @@ var rootCmd = &cobra.Command{
 			conn.Close()
 		}
 
-		// 2. Attach TUI
+		// 4. Attach TUI
 		if err := tui.Start(socketPath); err != nil {
-			fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
+			slog.Error("TUI error", "error", err)
 			os.Exit(1)
 		}
 	},
@@ -62,55 +73,73 @@ var serverCmd = &cobra.Command{
 	Short: "Starts the foobar background server",
 	Long:  `Starts the foobar background server that manages processes and IPC without launching the UI.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// 1. Load configuration
-		// For MVP, assume it's in the current working directory named foobar.config.json
-		cfgPath := "foobar.config.json"
-		cfg, err := config.Load(cfgPath)
+		// 1. Initialize DB first so the logger can wire into it
+		dbPath := filepath.Join(os.TempDir(), "foobar.duckdb")
+		if _, err := os.Stat("testdata"); err == nil {
+			dbPath = "testdata/foobar.duckdb"
+		}
+		db, err := store.NewStore(dbPath)
 		if err != nil {
-			// If missing, we can run empty, but let's log it
-			fmt.Fprintf(os.Stderr, "Config warning: %v\n", err)
+			fmt.Fprintf(os.Stderr, "failed to init db: %v\n", err)
+			os.Exit(1)
+		}
+		defer db.Close()
+
+		// 2. Initialize System Logger
+		if err := logger.Init("foobar-system.log", db, slog.LevelInfo); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to init logger: %v\n", err)
+			os.Exit(1)
+		}
+		slog.Info("Starting foobar background daemon...")
+
+		// 3. Load config
+		cfg, err := config.Load("foobar.config.json")
+		if err != nil {
+			slog.Warn("failed to load foobar.config.json, starting with empty configuration", "error", err)
 			cfg = &config.FoobarConfig{Processes: make(map[string]config.ProcessConfig)}
 		}
 
-		// 1.5 Initialize DB Store
-		db, err := store.NewStore("foobar.duckdb")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to init store: %v\n", err)
-			os.Exit(1)
-		}
-		// Notice: in a real daemon we defer db.Close() but since 
-		// select{} blocks forever, the OS will clean it up on exit, 
-		// or we can handle sigterm later.
-
-		// 2. Initialize process manager
+		// 4. Setup process manager
 		manager := process.NewManager(db)
 		for name, pcfg := range cfg.Processes {
 			manager.Add(name, pcfg)
 		}
-
-		// 3. Start processes
-		ctx := context.Background()
-		if err := manager.StartAll(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to start processes: %v\n", err)
-		}
-		
-		// Ensure processes are cleaned up on exit
+		manager.StartAll(context.Background())
 		defer manager.StopAll()
 
-		// 4. Start IPC Server
+		// 5. Setup RPC Server
 		srv := server.NewServer(socketPath, manager, db)
 		if err := srv.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "Server start failed: %v\n", err)
+			slog.Error("server failed to start", "error", err)
 			os.Exit(1)
 		}
-		
-		// 5. Block forever (or hook up signal handlers to shutdown gracefully)
+		defer srv.Stop() // Ensure server is stopped gracefully
+
+		// 6. Block forever (or hook up signal handlers to shutdown gracefully)
 		select {} 
+	},
+}
+
+var debugCmd = &cobra.Command{
+	Use:   "debug",
+	Short: "Tails the foobar-system.log file",
+	Long:  `Runs tail -f foobar-system.log to view the background daemon logs in real-time.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		tailCmd := exec.Command("tail", "-f", "foobar-system.log")
+		tailCmd.Stdout = os.Stdout
+		tailCmd.Stderr = os.Stderr
+		
+		fmt.Println("Tailing foobar-system.log (Ctrl+C to exit)...")
+		if err := tailCmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to run tail: %v\n", err)
+			os.Exit(1)
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(serverCmd)
+	rootCmd.AddCommand(debugCmd)
 }
 
 func main() {

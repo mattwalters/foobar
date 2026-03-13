@@ -6,9 +6,11 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
+	"mattwalters/foobar/internal/logger"
 	"mattwalters/foobar/internal/process"
 	"mattwalters/foobar/internal/store"
 )
@@ -90,13 +92,23 @@ func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	procs := s.manager.GetAllProcesses()
-	res := make([]ProcessResponse, 0, len(procs))
+	res := make([]ProcessResponse, 0, len(procs)+1)
 	for _, p := range procs {
 		res = append(res, ProcessResponse{
 			Name:   p.Name,
 			Status: p.GetStatus(),
 		})
 	}
+
+	// Always append the virtual system process so the UI can fetch its logs
+	res = append(res, ProcessResponse{
+		Name:   logger.SystemProcessName,
+		Status: "running",
+	})
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Name < res[j].Name
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(res)
@@ -122,10 +134,12 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, ok := s.manager.GetProcess(processName)
-	if !ok {
-		http.Error(w, "process not found", http.StatusNotFound)
-		return
+	if processName != logger.SystemProcessName {
+		_, ok := s.manager.GetProcess(processName)
+		if !ok {
+			http.Error(w, "process not found", http.StatusNotFound)
+			return
+		}
 	}
 
 	logs, err := s.db.GetRecentLogs(processName, limit)

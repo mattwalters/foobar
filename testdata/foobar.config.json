@@ -1,10 +1,16 @@
 {
-    "processes": {
-        "ping_loop": {
-            "command": "./dummy.sh ping"
-        },
-        "date_loop": {
-            "command": "./dummy.sh date"
-        }
+  "processes": {
+    "web": {
+      "command": "go run ./stub web"
+    },
+    "api": {
+      "command": "go run ./stub api"
+    },
+    "worker": {
+      "command": "go run ./stub worker"
+    },
+    "db": {
+      "command": "go run ./stub db"
     }
+  }
 }

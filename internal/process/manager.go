@@ -138,17 +138,21 @@ func (p *Process) Start(ctx context.Context) error {
 	go p.streamLogs(stderr, "stderr")
 
 	// Monitor completion
+	currentCmd := p.Cmd
 	go func() {
-		err := p.Cmd.Wait()
+		err := currentCmd.Wait()
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		
-		// If explicitly stopped by Stop(), preserve that status
-		if p.Status != "stopped" {
-			if err != nil {
-				p.Status = "failed"
-			} else {
-				p.Status = "stopped"
+		// Only update status if this goroutine belongs to the current active command
+		if p.Cmd == currentCmd {
+			// If explicitly stopped by Stop(), preserve that status
+			if p.Status != "stopped" {
+				if err != nil {
+					p.Status = "failed"
+				} else {
+					p.Status = "stopped"
+				}
 			}
 		}
 	}()

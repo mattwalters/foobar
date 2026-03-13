@@ -55,3 +55,4 @@ When working on this project, use the provided `Makefile`:
 - `make build`: Compiles `bin/foobar`.
 - `make test`: Runs `go test -v ./...`.
 - `make dev`: Kills any existing daemon, cleans old databases/sockets, builds the latest binary, and launches the TUI inside the `testdata/` directory against a dummy configuration.
+  - **IMPORTANT AI RULE:** Do *not* run `make dev` programmatically! The TUI output will overwhelm your terminal processing. Always ask the human user to run `make dev` in a separate terminal and provide verbal feedback instead.

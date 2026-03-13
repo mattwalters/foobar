@@ -76,8 +76,22 @@ func TestServerE2E(t *testing.T) {
 			t.Fatalf("failed to decode response: %v", err)
 		}
 
-		if len(procs) != 1 || procs[0].Name != "dummy" || procs[0].Status != "running" {
-			t.Errorf("unexpected processes response: %+v", procs)
+		if len(procs) != 2 {
+			t.Errorf("expected 2 processes (dummy + system), got %d: %+v", len(procs), procs)
+		}
+
+		foundDummy := false
+		for _, p := range procs {
+			if p.Name == "dummy" {
+				foundDummy = true
+				if p.Status != "running" {
+					t.Errorf("expected dummy status running, got %s", p.Status)
+				}
+			}
+		}
+		
+		if !foundDummy {
+			t.Errorf("dummy process not found in response: %+v", procs)
 		}
 	})
 
