@@ -154,9 +154,39 @@ func TestServerE2E(t *testing.T) {
 			t.Errorf("expected 200 OK, got %d", resp.StatusCode)
 		}
 
+		time.Sleep(50 * time.Millisecond) // buffer for context cancellation bugs
 		p, _ := manager.GetProcess("dummy")
 		if p.GetStatus() != "running" {
 			t.Errorf("expected process status running, got %s", p.GetStatus())
+		}
+	})
+
+	// --- E. Test POST /processes/restart
+	t.Run("POST /processes/restart", func(t *testing.T) {
+		resp, err := client.Post("http://unix/processes/restart?process=dummy", "application/json", nil)
+		if err != nil {
+			t.Fatalf("failed POST /processes/restart: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 OK, got %d", resp.StatusCode)
+		}
+
+		// Poll up to 2.5 seconds to wait for the async restart (which includes a 1s artificial delay)
+		restarted := false
+		for i := 0; i < 25; i++ {
+			time.Sleep(100 * time.Millisecond)
+			p, _ := manager.GetProcess("dummy")
+			if p.GetStatus() == "running" {
+				restarted = true
+				break
+			}
+		}
+
+		if !restarted {
+			p, _ := manager.GetProcess("dummy")
+			t.Errorf("expected process status running after restart, got %s", p.GetStatus())
 		}
 	})
 }

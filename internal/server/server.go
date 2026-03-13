@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -188,12 +189,26 @@ func (s *Server) handleProcessControl(w http.ResponseWriter, r *http.Request, ac
 	var err error
 	switch action {
 	case "start":
-		err = p.Start(r.Context())
+		err = p.Start(context.Background())
 	case "stop":
 		err = p.Stop()
 	case "restart":
-		p.Stop()
-		err = p.Start(r.Context())
+		err = p.Stop()
+		if err == nil {
+			go func() {
+				// Wait for process to fully stop before starting
+				for {
+					status := p.GetStatus()
+					if status == "stopped" || status == "failed" {
+						break
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+				// 1-second delay for visual user feedback in the TUI
+				time.Sleep(1 * time.Second)
+				p.Start(context.Background())
+			}()
+		}
 	default:
 		http.Error(w, "invalid action", http.StatusBadRequest)
 		return

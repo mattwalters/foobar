@@ -364,12 +364,24 @@ func (m *model) View() string {
 			visIcon = "○"
 		}
 		
-		statusStr := fmt.Sprintf("[%s]", p.Status)
-		row := fmt.Sprintf("%-2s %-12s %s", visIcon, p.Name, statusStr)
+		statusColor := lipgloss.Color("241") // default gray for stopped
+		if p.Status == "running" {
+			statusColor = lipgloss.Color("42") // green
+		} else if p.Status == "stopping" {
+			statusColor = lipgloss.Color("214") // yellow/orange
+		} else if p.Status == "failed" {
+			statusColor = lipgloss.Color("196") // red
+		}
+		
+		statusStr := lipgloss.NewStyle().Foreground(statusColor).Render(fmt.Sprintf("[%s]", p.Status))
+		
+		// Note we can't use standard Sprintf padding on ANSI-colored strings reliably without strip ANSI, 
+		// so we pad the name first, then append the color.
+		nameStr := fmt.Sprintf("%-12s", p.Name)
 		if i == m.selectedProcess {
-			listBuilder.WriteString(selStyle.Render(">", row) + "\n")
+			listBuilder.WriteString(selStyle.Render(">", visIcon+" "+nameStr) + " " + statusStr + "\n")
 		} else {
-			listBuilder.WriteString(itemStyle.Render(row) + "\n")
+			listBuilder.WriteString(itemStyle.Render(visIcon+" "+nameStr) + " " + statusStr + "\n")
 		}
 	}
 

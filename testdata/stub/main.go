@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -15,6 +17,22 @@ func main() {
 
 	processType := os.Args[1]
 	rand.Seed(time.Now().UnixNano())
+
+	// Simulated startup delay
+	fmt.Printf("[%s] Booting up...\n", processType)
+	time.Sleep(time.Duration(rand.Intn(1500)+1000) * time.Millisecond)
+
+	// Setup signal handling for simulated graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	
+	go func() {
+		<-sigChan
+		fmt.Printf("\n[%s] Received termination signal. Initiating graceful shutdown...\n", processType)
+		time.Sleep(time.Duration(rand.Intn(1500)+1000) * time.Millisecond)
+		fmt.Printf("[%s] Graceful shutdown complete.\n", processType)
+		os.Exit(0)
+	}()
 
 	switch processType {
 	case "web":

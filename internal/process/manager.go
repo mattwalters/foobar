@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"sync"
+	"syscall"
 	"time"
 
 	"mattwalters/foobar/internal/config"
@@ -146,8 +147,9 @@ func (p *Process) Start(ctx context.Context) error {
 		
 		// Only update status if this goroutine belongs to the current active command
 		if p.Cmd == currentCmd {
-			// If explicitly stopped by Stop(), preserve that status
-			if p.Status != "stopped" {
+			if p.Status == "stopping" {
+				p.Status = "stopped"
+			} else if p.Status != "stopped" {
 				if err != nil {
 					p.Status = "failed"
 				} else {
@@ -169,10 +171,22 @@ func (p *Process) Stop() error {
 		return nil
 	}
 
-	if err := p.Cmd.Process.Kill(); err != nil {
+	p.Status = "stopping"
+	if err := p.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		p.Cmd.Process.Kill() // fallback to immediate kill
 		return err
 	}
-	p.Status = "stopped"
+	
+	// Start a fallback timer to forcefully kill if it doesn't shut down gracefully
+	go func(cmd *exec.Cmd) {
+		time.Sleep(5 * time.Second)
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.Status == "stopping" && p.Cmd == cmd {
+			cmd.Process.Kill()
+		}
+	}(p.Cmd)
+
 	return nil
 }
 
