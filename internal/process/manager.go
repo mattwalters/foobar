@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"mattwalters/foobar/internal/config"
+	"mattwalters/foobar/internal/store"
 )
 
 // Process represents a managed command
@@ -17,7 +18,7 @@ type Process struct {
 	Name      string
 	Config    config.ProcessConfig
 	Cmd       *exec.Cmd
-	LogBuffer *LogBuffer
+	DB        *store.Store
 	Status    string // e.g. "stopped", "running", "failed"
 	mu        sync.RWMutex
 }
@@ -25,13 +26,15 @@ type Process struct {
 // Manager handles the lifecycle of multiple processes
 type Manager struct {
 	processes map[string]*Process
+	db        *store.Store
 	mu        sync.RWMutex
 }
 
 // NewManager creates a new Process Manager
-func NewManager() *Manager {
+func NewManager(db *store.Store) *Manager {
 	return &Manager{
 		processes: make(map[string]*Process),
+		db:        db,
 	}
 }
 
@@ -43,7 +46,7 @@ func (m *Manager) Add(name string, cfg config.ProcessConfig) *Process {
 	p := &Process{
 		Name:      name,
 		Config:    cfg,
-		LogBuffer: NewLogBuffer(1000), // Max 1000 logs in memory for MVP
+		DB:        m.db,
 		Status:    "stopped",
 	}
 	m.processes[name] = p
@@ -181,12 +184,16 @@ func (p *Process) streamLogs(pipe io.Reader, streamName string) {
 	for scanner.Scan() {
 		text := scanner.Text()
 		
-		entry := LogEntry{
+		entry := store.LogEntry{
 			Timestamp: time.Now(),
+			Process:   p.Name,
 			Stream:    streamName,
 			Message:   text,
+			Context:   "{}",
 		}
 		
-		p.LogBuffer.Append(entry)
+		if err := p.DB.InsertLog(entry); err != nil {
+			fmt.Printf("failed to insert log: %v\n", err)
+		}
 	}
 }

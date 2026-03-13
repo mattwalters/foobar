@@ -11,6 +11,7 @@ import (
 	"mattwalters/foobar/internal/config"
 	"mattwalters/foobar/internal/process"
 	"mattwalters/foobar/internal/server"
+	"mattwalters/foobar/internal/store"
 	"mattwalters/foobar/internal/tui"
 
 	"github.com/spf13/cobra"
@@ -71,8 +72,18 @@ var serverCmd = &cobra.Command{
 			cfg = &config.FoobarConfig{Processes: make(map[string]config.ProcessConfig)}
 		}
 
+		// 1.5 Initialize DB Store
+		db, err := store.NewStore("foobar.duckdb")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to init store: %v\n", err)
+			os.Exit(1)
+		}
+		// Notice: in a real daemon we defer db.Close() but since 
+		// select{} blocks forever, the OS will clean it up on exit, 
+		// or we can handle sigterm later.
+
 		// 2. Initialize process manager
-		manager := process.NewManager()
+		manager := process.NewManager(db)
 		for name, pcfg := range cfg.Processes {
 			manager.Add(name, pcfg)
 		}
@@ -87,7 +98,7 @@ var serverCmd = &cobra.Command{
 		defer manager.StopAll()
 
 		// 4. Start IPC Server
-		srv := server.NewServer(socketPath, manager)
+		srv := server.NewServer(socketPath, manager, db)
 		if err := srv.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "Server start failed: %v\n", err)
 			os.Exit(1)

@@ -2,14 +2,23 @@ package process
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"mattwalters/foobar/internal/config"
+	"mattwalters/foobar/internal/store"
 )
 
 func TestManagerStartAndStop(t *testing.T) {
-	m := NewManager()
+	dbPath := filepath.Join(t.TempDir(), "foobar-test.duckdb")
+	db, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to init db: %v", err)
+	}
+	defer db.Close()
+
+	m := NewManager(db)
 
 	m.Add("test_proc", config.ProcessConfig{
 		// A command that just prints "hello" every 100ms
@@ -33,7 +42,10 @@ func TestManagerStartAndStop(t *testing.T) {
 	// Give it time to generate some logs
 	time.Sleep(300 * time.Millisecond)
 
-	logs := p.LogBuffer.GetRecent(10)
+	logs, err := db.GetRecentLogs("test_proc", 10)
+	if err != nil {
+		t.Fatalf("failed to get logs: %v", err)
+	}
 	if len(logs) == 0 {
 		t.Fatal("expected logs, got none")
 	}

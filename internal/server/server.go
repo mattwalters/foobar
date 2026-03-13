@@ -9,20 +9,23 @@ import (
 	"strconv"
 
 	"mattwalters/foobar/internal/process"
+	"mattwalters/foobar/internal/store"
 )
 
 // Server represents the local IPC server
 type Server struct {
 	socketPath string
 	manager    *process.Manager
+	db         *store.Store
 	listener   net.Listener
 }
 
 // NewServer creates a new IPC Server
-func NewServer(socketPath string, manager *process.Manager) *Server {
+func NewServer(socketPath string, manager *process.Manager, db *store.Store) *Server {
 	return &Server{
 		socketPath: socketPath,
 		manager:    manager,
+		db:         db,
 	}
 }
 
@@ -117,13 +120,17 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	p, ok := s.manager.GetProcess(processName)
+	_, ok := s.manager.GetProcess(processName)
 	if !ok {
 		http.Error(w, "process not found", http.StatusNotFound)
 		return
 	}
 
-	logs := p.LogBuffer.GetRecent(limit)
+	logs, err := s.db.GetRecentLogs(processName, limit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to query logs: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(logs)

@@ -25,8 +25,10 @@ go.work
 *.swo
 .DS_Store
 
-# Local configuration files that shouldn't be committed
+# Local configuration and database files that shouldn't be committed
 /foobar.config.json
+*.duckdb
+*.duckdb.wal
 
 # IDE specific folders
 .idea/
