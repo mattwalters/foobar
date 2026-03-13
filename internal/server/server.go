@@ -113,7 +113,7 @@ func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(res)
+	_ = json.NewEncoder(w).Encode(res)
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +133,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	// Allow passing ?channel=web&channel=api
 	// If empty, we will pass an empty slice which returns all logs
 	channels := r.URL.Query()["channel"]
-	
+
 	// Backwards compatibility with ?process=
 	if len(channels) == 0 {
 		if p := r.URL.Query().Get("process"); p != "" {
@@ -165,7 +165,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(logs)
+	_ = json.NewEncoder(w).Encode(logs)
 }
 
 func (s *Server) handleProcessControl(w http.ResponseWriter, r *http.Request, action string) {
@@ -195,19 +195,7 @@ func (s *Server) handleProcessControl(w http.ResponseWriter, r *http.Request, ac
 	case "restart":
 		err = p.Stop()
 		if err == nil {
-			go func() {
-				// Wait for process to fully stop before starting
-				for {
-					status := p.GetStatus()
-					if status == "stopped" || status == "failed" {
-						break
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-				// 1-second delay for visual user feedback in the TUI
-				time.Sleep(1 * time.Second)
-				p.Start(context.Background())
-			}()
+			err = p.Start(context.Background())
 		}
 	default:
 		http.Error(w, "invalid action", http.StatusBadRequest)
@@ -220,5 +208,5 @@ func (s *Server) handleProcessControl(w http.ResponseWriter, r *http.Request, ac
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf("process %s %sed", processName, action)))
+	_, _ = w.Write([]byte(fmt.Sprintf("process %s %sed", processName, action)))
 }

@@ -31,6 +31,7 @@ type tickMsg time.Time
 type processesMsg []Process
 
 type logsAction int
+
 const (
 	logsReset logsAction = iota
 	logsAppend
@@ -56,10 +57,10 @@ type model struct {
 	err             error
 	width           int
 	height          int
-	
+
 	// Phase 11: Interleaved Logs & Channel Filtering
 	visibleChannels map[string]bool // Empty map means "show all"
-	
+
 	// Phase 11: Infinite Scrolling & Memory limit
 	logBuffer       []LogEntry
 	isFetchingOlder bool
@@ -116,7 +117,7 @@ func (m *model) fetchLogsCmd(action logsAction, beforeTime, afterTime time.Time)
 	return func() tea.Msg {
 		// Build query parameters based on visible channels
 		var queryParams []string
-		
+
 		// If map is strictly empty, we show all (do not append ?channel=)
 		if len(m.visibleChannels) > 0 {
 			for ch, visible := range m.visibleChannels {
@@ -124,7 +125,7 @@ func (m *model) fetchLogsCmd(action logsAction, beforeTime, afterTime time.Time)
 					queryParams = append(queryParams, fmt.Sprintf("channel=%s", ch))
 				}
 			}
-			
+
 			// If user mutated all channels off (the map has entries but all are false)
 			// we must prevent it from falling back to "show all" by passing a dummy channel
 			if len(queryParams) == 0 {
@@ -145,7 +146,7 @@ func (m *model) fetchLogsCmd(action logsAction, beforeTime, afterTime time.Time)
 			limit = 1000
 		}
 		queryParams = append(queryParams, fmt.Sprintf("limit=%d", limit))
-		
+
 		url := fmt.Sprintf("http://unix/logs?%s", strings.Join(queryParams, "&"))
 		resp, err := m.client.Get(url)
 		if err != nil {
@@ -293,10 +294,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, entry := range m.logBuffer {
 				timeStr := entry.Timestamp.Format("15:04:05")
 				timeRendered := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(timeStr)
-				
+
 				procStyle := lipgloss.NewStyle().Foreground(channelColor(entry.Process)).Bold(true)
 				procRendered := procStyle.Render(entry.Process)
-				
+
 				msgRendered := entry.Message
 				if entry.Stream == "stderr" {
 					msgRendered = lipgloss.NewStyle().Foreground(lipgloss.Color("167")).Render(msgRendered)
@@ -304,10 +305,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				sb.WriteString(fmt.Sprintf("%s %s %s\n", timeRendered, procRendered, msgRendered))
 			}
-			
+
 			isAtBottom := m.viewport.AtBottom()
 			m.viewport.SetContent(sb.String())
-			
+
 			// Auto scroll to bottom smoothly if appending or reset
 			if msg.action == logsReset || (msg.action == logsAppend && isAtBottom) {
 				m.viewport.GotoBottom()
@@ -348,14 +349,13 @@ func (m *model) View() string {
 	// Render Process List
 	var listBuilder strings.Builder
 	listBuilder.WriteString(titleStyle.Render(" Processes ") + "\n\n")
-	
+
 	if len(m.processes) == 0 {
 		listBuilder.WriteString(itemStyle.Render("No processes found."))
 	}
 
 	for i, p := range m.processes {
-		// Determine visibility icon
-		visIcon := " "
+		var visIcon string
 		if len(m.visibleChannels) == 0 {
 			visIcon = "●" // all visible by default
 		} else if m.visibleChannels[p.Name] {
@@ -363,7 +363,7 @@ func (m *model) View() string {
 		} else {
 			visIcon = "○"
 		}
-		
+
 		statusColor := lipgloss.Color("241") // default gray for stopped
 		if p.Status == "running" {
 			statusColor = lipgloss.Color("42") // green
@@ -372,10 +372,10 @@ func (m *model) View() string {
 		} else if p.Status == "failed" {
 			statusColor = lipgloss.Color("196") // red
 		}
-		
+
 		statusStr := lipgloss.NewStyle().Foreground(statusColor).Render(fmt.Sprintf("[%s]", p.Status))
-		
-		// Note we can't use standard Sprintf padding on ANSI-colored strings reliably without strip ANSI, 
+
+		// Note we can't use standard Sprintf padding on ANSI-colored strings reliably without strip ANSI,
 		// so we pad the name first, then append the color.
 		nameStr := fmt.Sprintf("%-12s", p.Name)
 		if i == m.selectedProcess {
@@ -388,7 +388,7 @@ func (m *model) View() string {
 	for i := len(m.processes); i < m.height-17; i++ {
 		listBuilder.WriteString("\n")
 	}
-	
+
 	// Add footer instructions
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
 	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
@@ -403,7 +403,7 @@ func (m *model) View() string {
 		keyStyle.Render("q"), descStyle.Render("quit"),
 	)
 	listBuilder.WriteString(footerText)
-	
+
 	listPane := listStyle.Height(m.height - 2).Render(listBuilder.String())
 	vpPane := vpStyle.Width(m.width - 32).Height(m.height - 2).Render(m.viewport.View())
 

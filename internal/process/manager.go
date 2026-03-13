@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -16,12 +17,13 @@ import (
 
 // Process represents a managed command
 type Process struct {
-	Name      string
-	Config    config.ProcessConfig
-	Cmd       *exec.Cmd
-	DB        *store.Store
-	Status    string // e.g. "stopped", "running", "failed"
-	mu        sync.RWMutex
+	Name     string
+	Config   config.ProcessConfig
+	Cmd      *exec.Cmd
+	DB       *store.Store
+	Status   string        // e.g. "stopped", "running", "failed"
+	waitDone chan struct{} // Closed when the process finishes waiting
+	mu       sync.RWMutex
 }
 
 // Manager handles the lifecycle of multiple processes
@@ -45,10 +47,10 @@ func (m *Manager) Add(name string, cfg config.ProcessConfig) *Process {
 	defer m.mu.Unlock()
 
 	p := &Process{
-		Name:      name,
-		Config:    cfg,
-		DB:        m.db,
-		Status:    "stopped",
+		Name:   name,
+		Config: cfg,
+		DB:     m.db,
+		Status: "stopped",
 	}
 	m.processes[name] = p
 	return p
@@ -80,7 +82,7 @@ func (m *Manager) StopAll() {
 	defer m.mu.RUnlock()
 
 	for _, p := range m.processes {
-		p.Stop()
+		_ = p.Stop()
 	}
 }
 
@@ -96,7 +98,7 @@ func (m *Manager) GetProcess(name string) (*Process, bool) {
 func (m *Manager) GetAllProcesses() []*Process {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	list := make([]*Process, 0, len(m.processes))
 	for _, p := range m.processes {
 		list = append(list, p)
@@ -140,11 +142,15 @@ func (p *Process) Start(ctx context.Context) error {
 
 	// Monitor completion
 	currentCmd := p.Cmd
+	// Create a channel that will be closed when Wait() returns
+	done := make(chan struct{})
+
 	go func() {
+		defer close(done)
 		err := currentCmd.Wait()
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		
+
 		// Only update status if this goroutine belongs to the current active command
 		if p.Cmd == currentCmd {
 			if p.Status == "stopping" {
@@ -159,33 +165,43 @@ func (p *Process) Start(ctx context.Context) error {
 		}
 	}()
 
+	// Store the done channel on the process object so Stop() can use it
+	// We need to add this field to the Process struct
+	p.waitDone = done
+
 	return nil
 }
 
 // Stop terminates the process
 func (p *Process) Stop() error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if p.Status != "running" || p.Cmd == nil || p.Cmd.Process == nil {
+		p.mu.Unlock()
 		return nil
 	}
 
 	p.Status = "stopping"
-	if err := p.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		p.Cmd.Process.Kill() // fallback to immediate kill
+	cmd := p.Cmd
+	done := p.waitDone
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		_ = cmd.Process.Kill() // fallback to immediate kill
+		p.mu.Unlock()
 		return err
 	}
-	
-	// Start a fallback timer to forcefully kill if it doesn't shut down gracefully
-	go func(cmd *exec.Cmd) {
-		time.Sleep(5 * time.Second)
+	p.mu.Unlock()
+
+	// Wait for process to exit or timeout
+	select {
+	case <-done:
+		// Process exited gracefully
+	case <-time.After(5 * time.Second):
+		// Force kill if it hasn't exited
 		p.mu.Lock()
-		defer p.mu.Unlock()
 		if p.Status == "stopping" && p.Cmd == cmd {
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
 		}
-	}(p.Cmd)
+		p.mu.Unlock()
+	}
 
 	return nil
 }
@@ -201,7 +217,7 @@ func (p *Process) streamLogs(pipe io.Reader, streamName string) {
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		text := scanner.Text()
-		
+
 		entry := store.LogEntry{
 			Timestamp: time.Now(),
 			Process:   p.Name,
@@ -209,9 +225,10 @@ func (p *Process) streamLogs(pipe io.Reader, streamName string) {
 			Message:   text,
 			Context:   "{}",
 		}
-		
+
 		if err := p.DB.InsertLog(entry); err != nil {
-			fmt.Printf("failed to insert log: %v\n", err)
+			// Avoid printing directly to stdout as it may corrupt TUI output
+			slog.Error("failed to insert log into DuckDB", "process", p.Name, "stream", streamName, "error", err)
 		}
 	}
 }

@@ -46,7 +46,7 @@ var rootCmd = &cobra.Command{
 				slog.Error("failed to start background daemon", "error", err)
 				os.Exit(1)
 			}
-			
+
 			// Wait for socket to become available
 			for i := 0; i < 10; i++ {
 				conn, err := net.Dial("unix", socketPath)
@@ -74,9 +74,9 @@ var serverCmd = &cobra.Command{
 	Long:  `Starts the foobar background server that manages processes and IPC without launching the UI.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// 1. Initialize DB first so the logger can wire into it
-		dbPath := filepath.Join(os.TempDir(), "foobar.duckdb")
-		if _, err := os.Stat("testdata"); err == nil {
-			dbPath = "testdata/foobar.duckdb"
+		dbPath := os.Getenv("FOOBAR_DB_PATH")
+		if dbPath == "" {
+			dbPath = filepath.Join(os.TempDir(), "foobar.duckdb")
 		}
 		db, err := store.NewStore(dbPath)
 		if err != nil {
@@ -104,7 +104,7 @@ var serverCmd = &cobra.Command{
 		for name, pcfg := range cfg.Processes {
 			manager.Add(name, pcfg)
 		}
-		manager.StartAll(context.Background())
+		_ = manager.StartAll(context.Background())
 		defer manager.StopAll()
 
 		// 5. Setup RPC Server
@@ -113,10 +113,10 @@ var serverCmd = &cobra.Command{
 			slog.Error("server failed to start", "error", err)
 			os.Exit(1)
 		}
-		defer srv.Stop() // Ensure server is stopped gracefully
+		defer func() { _ = srv.Stop() }() // Ensure server is stopped gracefully
 
 		// 6. Block forever (or hook up signal handlers to shutdown gracefully)
-		select {} 
+		select {}
 	},
 }
 
@@ -128,7 +128,7 @@ var debugCmd = &cobra.Command{
 		tailCmd := exec.Command("tail", "-f", "foobar-system.log")
 		tailCmd.Stdout = os.Stdout
 		tailCmd.Stderr = os.Stderr
-		
+
 		fmt.Println("Tailing foobar-system.log (Ctrl+C to exit)...")
 		if err := tailCmd.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to run tail: %v\n", err)

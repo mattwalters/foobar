@@ -29,7 +29,7 @@ func TestServerE2E(t *testing.T) {
 	manager.Add("dummy", config.ProcessConfig{
 		Command: "while true; do echo 'alive'; sleep 0.1; done",
 	})
-	
+
 	// Start processes so we get logs
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -44,7 +44,7 @@ func TestServerE2E(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Server start failed: %v", err)
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 
 	// 4. Create HTTP Client configured to use the Unix Socket
 	client := &http.Client{
@@ -89,7 +89,7 @@ func TestServerE2E(t *testing.T) {
 				}
 			}
 		}
-		
+
 		if !foundDummy {
 			t.Errorf("dummy process not found in response: %+v", procs)
 		}
@@ -141,7 +141,7 @@ func TestServerE2E(t *testing.T) {
 			t.Errorf("expected process status stopped, got %s", p.GetStatus())
 		}
 	})
-	
+
 	// --- D. Test POST /processes/start
 	t.Run("POST /processes/start", func(t *testing.T) {
 		resp, err := client.Post("http://unix/processes/start?process=dummy", "application/json", nil)

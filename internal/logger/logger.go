@@ -38,9 +38,9 @@ func (h *logHandler) Handle(ctx context.Context, r slog.Record) error {
 			Message:   r.Message,
 			Context:   "{}",
 		}
-		
+
 		// Fire and forget; if the DB fails to log a DB error we can't do much
-		go h.db.InsertLog(entry)
+		go func() { _ = h.db.InsertLog(entry) }()
 	}
 
 	return nil
@@ -65,7 +65,7 @@ func (h *logHandler) WithGroup(name string) slog.Handler {
 // Init configures the global slog instance
 func Init(logFilePath string, db *store.Store, level slog.Level) error {
 	var fileWriter io.Writer
-	
+
 	if logFilePath != "" {
 		f, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
@@ -92,6 +92,6 @@ func Init(logFilePath string, db *store.Store, level slog.Level) error {
 
 	logger := slog.New(h)
 	slog.SetDefault(logger)
-	
+
 	return nil
 }

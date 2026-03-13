@@ -45,7 +45,7 @@ func NewStore(dbPath string) (*Store, error) {
 	-- but if we want fast lookups by process:
 	-- DuckDB 0.10+ supports indexing reasonably well, but we'll stick to raw columnar scans for MVP
 	`
-	
+
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to create schema: %w", err)
@@ -77,7 +77,7 @@ func (s *Store) GetRecentLogs(processes []string, limit int, beforeTime, afterTi
 
 	whereClause := ""
 	var args []interface{}
-	
+
 	// Dynamically build the IN clause if specific processes are requested
 	if len(processes) > 0 {
 		whereClause = "WHERE process IN ("
@@ -90,7 +90,7 @@ func (s *Store) GetRecentLogs(processes []string, limit int, beforeTime, afterTi
 		}
 		whereClause += ")"
 	}
-	
+
 	if !beforeTime.IsZero() {
 		if whereClause == "" {
 			whereClause = "WHERE timestamp < ?"
@@ -138,7 +138,7 @@ func (s *Store) GetRecentLogs(processes []string, limit int, beforeTime, afterTi
 		}
 		logs = append(logs, l)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}

@@ -23,10 +23,10 @@ func TestApp_BasicRender(t *testing.T) {
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return bytes.Contains(b, []byte("Processes"))
 	}, teatest.WithDuration(time.Second))
-	
+
 	// Test sending keypresses to the UI
 	tm.Type("j") // down arrow
-	
+
 	time.Sleep(50 * time.Millisecond)
 
 	// Send a quit message

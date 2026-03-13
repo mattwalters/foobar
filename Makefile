@@ -8,7 +8,7 @@ build:
 # We first clean up completely to ensure a fresh start, build the latest code, 
 # and then run the TUI from within the testdata directory so it picks up the stubs.
 dev: clean build
-	cd testdata && ../bin/foobar
+	cd testdata && FOOBAR_DB_PATH=foobar.duckdb ../bin/foobar
 
 # Stop the background daemon if it is running
 stop:
