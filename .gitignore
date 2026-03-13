@@ -5,7 +5,7 @@
 *.so
 *.dylib
 bin/
-foobar
+/foobar
 
 # Test binary, built with `go test -c`
 *.test
@@ -26,7 +26,7 @@ go.work
 .DS_Store
 
 # Local configuration files that shouldn't be committed
-foobar.config.json
+/foobar.config.json
 
 # IDE specific folders
 .idea/
