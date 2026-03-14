@@ -1,4 +1,4 @@
-.PHONY: build dev clean stop test test-nocache lint
+.PHONY: build dev clean stop test test-nocache lint lint-fix
 
 # Build the foobar binary into the bin/ directory
 build:
@@ -29,12 +29,28 @@ test:
 test-nocache:
 	go test -count=1 -v ./...
 
-# Run linters on the codebase
+# Run linters and check formatting without modifying files
 lint:
+	go vet ./...
+	@unformatted=$$(gofmt -l .) ; \
+	if [ -n "$$unformatted" ]; then \
+		echo "The following files are not formatted correctly:" ; \
+		echo "$$unformatted" ; \
+		echo "Please run 'make lint-fix' locally and commit the changes." ; \
+		exit 1 ; \
+	fi
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run; \
+	else \
+		echo "golangci-lint not installed, skipping advanced linting."; \
+	fi
+
+# Run linters and automatically fix issues where possible
+lint-fix:
 	go vet ./...
 	go fmt ./...
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
+		golangci-lint run --fix; \
 	else \
 		echo "golangci-lint not installed, skipping advanced linting."; \
 	fi
