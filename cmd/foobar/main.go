@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -95,8 +96,38 @@ var serverCmd = &cobra.Command{
 		// 3. Load config
 		cfg, err := config.Load("foobar.config.json")
 		if err != nil {
-			slog.Warn("failed to load foobar.config.json, starting with empty configuration", "error", err)
-			cfg = &config.FoobarConfig{Processes: make(map[string]config.ProcessConfig)}
+			if errors.Is(err, os.ErrNotExist) {
+				slog.Warn("foobar.config.json not found, starting with empty configuration")
+				cfg = &config.FoobarConfig{Processes: make(map[string]config.ProcessConfig)}
+			} else {
+				fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		// 3b. Load Concurrently scripts if configured
+		if cfg.Concurrently != nil {
+			procs, err := config.ExtractConcurrentlyProcesses(cfg.Concurrently.File, cfg.Concurrently.Script)
+			if err != nil {
+				slog.Error("failed to extract concurrently processes", "error", err)
+			} else {
+				for name, pcfg := range procs {
+					cfg.Processes[name] = pcfg
+				}
+			}
+		}
+
+		// 3c. Load Docker Compose if configured
+		if cfg.DockerCompose != "" {
+			slog.Info("booting docker compose stack", "file", cfg.DockerCompose)
+			procs, err := config.SetupDockerCompose(cfg.DockerCompose)
+			if err != nil {
+				slog.Error("failed to setup docker compose", "error", err)
+			} else {
+				for name, pcfg := range procs {
+					cfg.Processes[name] = pcfg
+				}
+			}
 		}
 
 		// 4. Setup process manager

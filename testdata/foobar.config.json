@@ -1,4 +1,9 @@
 {
+  "docker_compose": "docker-compose.yml",
+  "concurrently": {
+    "file": "package.json",
+    "script": "dev"
+  },
   "processes": {
     "web": {
       "command": "go run ./stub web"

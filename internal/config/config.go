@@ -8,7 +8,15 @@ import (
 
 // FoobarConfig represents the root configuration structure
 type FoobarConfig struct {
-	Processes map[string]ProcessConfig `json:"processes"`
+	DockerCompose string                   `json:"docker_compose,omitempty"`
+	Concurrently  *ConcurrentlyConfig      `json:"concurrently,omitempty"`
+	Processes     map[string]ProcessConfig `json:"processes,omitempty"`
+}
+
+// ConcurrentlyConfig holds configuration for parsing a package.json script
+type ConcurrentlyConfig struct {
+	File   string `json:"file"`
+	Script string `json:"script"`
 }
 
 // ProcessConfig holds configuration for an individual managed process
@@ -29,10 +37,27 @@ func Load(path string) (*FoobarConfig, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	if cfg.Processes == nil {
+		cfg.Processes = make(map[string]ProcessConfig)
+	}
+
 	// Validate config
+	if cfg.DockerCompose == "" && cfg.Concurrently == nil && len(cfg.Processes) == 0 {
+		return nil, fmt.Errorf("configuration is empty: you must specify at least one of 'docker_compose', 'concurrently', or 'processes'")
+	}
+
+	if cfg.Concurrently != nil {
+		if cfg.Concurrently.File == "" {
+			return nil, fmt.Errorf("concurrently configuration missing required field 'file' (e.g., 'package.json')")
+		}
+		if cfg.Concurrently.Script == "" {
+			return nil, fmt.Errorf("concurrently configuration missing required field 'script' (e.g., 'dev')")
+		}
+	}
+
 	for name, pcfg := range cfg.Processes {
 		if pcfg.Command == "" {
-			return nil, fmt.Errorf("process '%s' must specify a command", name)
+			return nil, fmt.Errorf("process '%s' must specify a 'command' to run", name)
 		}
 	}
 

@@ -1,0 +1,6 @@
+{
+  "name": "foobar-test",
+  "scripts": {
+    "dev": "concurrently \"echo web process\" \"echo api process\""
+  }
+}
