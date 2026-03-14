@@ -38,10 +38,10 @@ func ExtractConcurrentlyProcesses(pkgPath, scriptName string) (map[string]Proces
 
 func parseConcurrentlyArgs(cmdLine string) (map[string]ProcessConfig, error) {
 	args := splitTokens(cmdLine)
-	
+
 	procs := make(map[string]ProcessConfig)
 	var names []string
-	
+
 	// Skip the first arg "concurrently"
 	for i := 1; i < len(args); i++ {
 		arg := args[i]
@@ -61,7 +61,7 @@ func parseConcurrentlyArgs(cmdLine string) (map[string]ProcessConfig, error) {
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		
+
 		// It's a command
 		name := fmt.Sprintf("cmd%d", len(procs))
 		if len(procs) < len(names) && names[len(procs)] != "" {
@@ -69,11 +69,11 @@ func parseConcurrentlyArgs(cmdLine string) (map[string]ProcessConfig, error) {
 		}
 		procs[name] = ProcessConfig{Command: arg}
 	}
-	
+
 	if len(procs) == 0 {
 		return nil, fmt.Errorf("no commands found in concurrently invocation")
 	}
-	
+
 	return procs, nil
 }
 
@@ -83,7 +83,7 @@ func splitTokens(s string) []string {
 	inQuote := false
 	var quoteChar rune
 	escapeNext := false
-	
+
 	for _, r := range s {
 		if escapeNext {
 			current.WriteRune(r)

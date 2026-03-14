@@ -33,7 +33,7 @@ func SetupDockerCompose(composeFile string) (map[string]ProcessConfig, error) {
 		}
 		// The command to tail logs for this specific service
 		cmdStr := fmt.Sprintf("docker compose -f %s logs -f %s", composeFile, svc)
-		
+
 		procs[svc] = ProcessConfig{Command: cmdStr}
 	}
 
