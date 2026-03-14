@@ -23,5 +23,18 @@ jobs:
     - name: Test
       run: make test-nocache
 
-    - name: Lint
-      run: make lint
+    - name: Check code formatting
+      run: |
+        unformatted=$(gofmt -l .)
+        if [ -n "$unformatted" ]; then
+          echo "The following files are not formatted correctly:"
+          echo "$unformatted"
+          echo "Please run 'go fmt ./...' locally and commit the changes."
+          exit 1
+        fi
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        args: --timeout=5m
