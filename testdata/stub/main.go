@@ -25,7 +25,7 @@ func main() {
 	// Setup signal handling for simulated graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	
+
 	go func() {
 		<-sigChan
 		fmt.Printf("\n[%s] Received termination signal. Initiating graceful shutdown...\n", processType)
@@ -53,9 +53,9 @@ func simulateWeb() {
 	fmt.Println("ready - started server on 0.0.0.0:3000, url: http://localhost:3000")
 	fmt.Println("info  - loaded env from .env.local")
 	fmt.Println("event - compiled client and server successfully in 1250 ms (154 modules)")
-	
+
 	routes := []string{"/", "/dashboard", "/settings", "/api/auth/session"}
-	
+
 	for {
 		time.Sleep(time.Duration(rand.Intn(3000)+500) * time.Millisecond)
 		route := routes[rand.Intn(len(routes))]
@@ -66,7 +66,7 @@ func simulateWeb() {
 		} else if rand.Float32() > 0.8 {
 			status = 304
 		}
-		
+
 		ms := rand.Intn(150) + 10
 		fmt.Printf("Wait  - compiling /page (client and server)... \n")
 		time.Sleep(50 * time.Millisecond)
@@ -87,7 +87,7 @@ func simulateAPI() {
 	for {
 		time.Sleep(time.Duration(rand.Intn(2000)+100) * time.Millisecond)
 		endpoint := endpoints[rand.Intn(len(endpoints))]
-		
+
 		if rand.Float32() > 0.9 {
 			fmt.Fprintf(os.Stderr, "[error] Failed to fetch data for %s: connection timeout\n", endpoint)
 		} else {
@@ -109,10 +109,10 @@ func simulateWorker() {
 		time.Sleep(time.Duration(rand.Intn(5000)+1000) * time.Millisecond)
 		job := jobs[rand.Intn(len(jobs))]
 		fmt.Printf("[JOB] Received job: %s\n", job)
-		
+
 		processingTime := rand.Intn(2000) + 500
 		time.Sleep(time.Duration(processingTime) * time.Millisecond)
-		
+
 		if rand.Float32() > 0.85 {
 			fmt.Fprintf(os.Stderr, "[ERROR] Job %s failed after %dms. Retrying in 5s...\n", job, processingTime)
 		} else {
@@ -124,10 +124,10 @@ func simulateWorker() {
 func simulateDB() {
 	fmt.Println("PostgreSQL init process complete; ready for start up.")
 	fmt.Println("LOG:  database system is ready to accept connections")
-	
+
 	for {
 		time.Sleep(time.Duration(rand.Intn(8000)+2000) * time.Millisecond)
-		
+
 		if rand.Float32() > 0.7 {
 			fmt.Println("LOG:  checkpoint starting: time")
 			time.Sleep(200 * time.Millisecond)
