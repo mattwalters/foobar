@@ -80,13 +80,12 @@ func TestHandler_HandleGetProcesses_Error(t *testing.T) {
 	if !res.IsError {
 		t.Fatalf("expected IsError true")
 	}
-	
+
 	content := res.Content[0].(mcp.TextContent).Text
 	if !strings.Contains(content, "internal server error") {
 		t.Errorf("expected error message in text content, got %s", content)
 	}
 }
-
 
 func TestHandler_HandleQueryLogs(t *testing.T) {
 	h := NewHandler("fake.sock")
@@ -167,4 +166,3 @@ func TestHandler_HandleQueryLogs_Error(t *testing.T) {
 		t.Errorf("expected error message in text content, got %s", content)
 	}
 }
-
