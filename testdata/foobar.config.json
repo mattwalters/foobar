@@ -1,0 +1,21 @@
+{
+  "docker_compose": "docker-compose.yml",
+  "concurrently": {
+    "file": "package.json",
+    "script": "dev"
+  },
+  "processes": {
+    "web": {
+      "command": "go run ./stub web"
+    },
+    "api": {
+      "command": "go run ./stub api"
+    },
+    "worker": {
+      "command": "go run ./stub worker"
+    },
+    "db": {
+      "command": "go run ./stub db"
+    }
+  }
+}
