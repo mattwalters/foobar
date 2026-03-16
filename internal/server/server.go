@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"mattwalters/foobar/internal/config"
 	"mattwalters/foobar/internal/logger"
 	"mattwalters/foobar/internal/process"
 	"mattwalters/foobar/internal/store"
@@ -60,6 +61,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/processes/start", func(w http.ResponseWriter, r *http.Request) { s.handleProcessControl(w, r, "start") })
 	mux.HandleFunc("/processes/stop", func(w http.ResponseWriter, r *http.Request) { s.handleProcessControl(w, r, "stop") })
 	mux.HandleFunc("/processes/restart", func(w http.ResponseWriter, r *http.Request) { s.handleProcessControl(w, r, "restart") })
+	mux.HandleFunc("/processes/add", s.handleAddProcess)
 	mux.HandleFunc("/logs", s.handleLogs)
 
 	go func() {
@@ -209,4 +211,49 @@ func (s *Server) handleProcessControl(w http.ResponseWriter, r *http.Request, ac
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(fmt.Sprintf("process %s %sed", processName, action)))
+}
+
+type AddProcessRequest struct {
+	Name    string `json:"name"`
+	Command string `json:"command"`
+	Dir     string `json:"dir,omitempty"`
+}
+
+func (s *Server) handleAddProcess(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req AddProcessRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" || req.Command == "" {
+		http.Error(w, "name and command are required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if process already exists
+	if _, exists := s.manager.GetProcess(req.Name); exists {
+		http.Error(w, "process already exists", http.StatusConflict)
+		return
+	}
+
+	pcfg := config.ProcessConfig{
+		Command: req.Command,
+		Dir:     req.Dir,
+	}
+
+	// Safely add and start the new process
+	p := s.manager.Add(req.Name, pcfg)
+	if err := p.Start(context.Background()); err != nil {
+		http.Error(w, fmt.Sprintf("failed to start process: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(fmt.Sprintf("process %s added and started", req.Name)))
 }

@@ -1,18 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"strings"
 	"time" // Keep time because time.Sleep is used
 
 	"mattwalters/foobar/internal/config"
 	"mattwalters/foobar/internal/logger"
+	"mattwalters/foobar/internal/mcp"
 	"mattwalters/foobar/internal/process"
 	"mattwalters/foobar/internal/server"
 	"mattwalters/foobar/internal/store"
@@ -22,6 +29,37 @@ import (
 )
 
 var socketPath = "/tmp/foobar.sock"
+
+func ensureServerRunning() {
+	// Check if server is running by dialing the socket
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		// Server not running, spin it up in the background
+		slog.Info("Starting background daemon...")
+		serverCmdExec := exec.Command(os.Args[0], "server")
+		// Pass stderr so we can see why it crashes on startup before slog is active
+		serverCmdExec.Stderr = os.Stderr
+		// Detach from current process group (simple backgrounding)
+		if err := serverCmdExec.Start(); err != nil {
+			slog.Error("failed to start background daemon", "error", err)
+			os.Exit(1)
+		}
+
+		// Wait for socket to become available
+		for i := 0; i < 10; i++ {
+			c, err := net.Dial("unix", socketPath)
+			if err == nil {
+				c.Close()
+				return
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		fmt.Fprintln(os.Stderr, "timeout waiting for background daemon")
+		os.Exit(1)
+	} else {
+		conn.Close()
+	}
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "foobar",
@@ -34,32 +72,13 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// 3. Check if server is running by dialing the socket
-		conn, err := net.Dial("unix", socketPath)
-		if err != nil {
-			// Server not running, spin it up in the background
-			slog.Info("Starting background daemon...")
-			serverCmd := exec.Command(os.Args[0], "server")
-			// Pass stderr so we can see why it crashes on startup before slog is active
-			serverCmd.Stderr = os.Stderr
-			// Detach from current process group (simple backgrounding)
-			if err := serverCmd.Start(); err != nil {
-				slog.Error("failed to start background daemon", "error", err)
-				os.Exit(1)
-			}
-
-			// Wait for socket to become available
-			for i := 0; i < 10; i++ {
-				conn, err := net.Dial("unix", socketPath)
-				if err == nil {
-					conn.Close()
-					break
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-		} else {
-			conn.Close()
+		if len(args) > 0 {
+			// Implicit run command
+			runCmd.Run(cmd, args)
+			return
 		}
+
+		ensureServerRunning()
 
 		// 4. Attach TUI
 		if err := tui.Start(socketPath); err != nil {
@@ -168,9 +187,103 @@ var debugCmd = &cobra.Command{
 	},
 }
 
+var runName string
+var runFg bool
+
+var runCmd = &cobra.Command{
+	Use:   "run [command...]",
+	Short: "Run an ad-hoc command",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ensureServerRunning()
+
+		commandStr := strings.Join(args, " ")
+		name := runName
+		originalName := ""
+		if name == "" {
+			name = filepath.Base(args[0])
+			originalName = name
+		}
+
+		client := &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return net.Dial("unix", socketPath)
+				},
+			},
+		}
+
+		cwd, _ := os.Getwd()
+
+		for i := 1; i <= 100; i++ {
+			reqBody, _ := json.Marshal(server.AddProcessRequest{
+				Name:    name,
+				Command: commandStr,
+				Dir:     cwd,
+			})
+
+			resp, err := client.Post("http://unix/processes/add", "application/json", bytes.NewReader(reqBody))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to add process: %v\n", err)
+				os.Exit(1)
+			}
+
+			if resp.StatusCode == http.StatusOK {
+				resp.Body.Close()
+				break
+			}
+
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if resp.StatusCode == http.StatusConflict && originalName != "" {
+				name = fmt.Sprintf("%s-%d", originalName, i)
+				continue
+			}
+
+			fmt.Fprintf(os.Stderr, "server rejected process: %s\n", string(body))
+			os.Exit(1)
+		}
+
+		if runFg {
+			fmt.Printf("Started '%s' in foreground mode.\n(Logs are captured by foobar, but not streamed here yet)\nPress Ctrl+C to stop it.\n", name)
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, os.Interrupt)
+			<-c
+			fmt.Printf("\nStopping %s...\n", name)
+			_, _ = client.Post(fmt.Sprintf("http://unix/processes/stop?process=%s", name), "application/json", nil)
+		} else {
+			// Background mode: launch TUI
+			if err := tui.Start(socketPath); err != nil {
+				slog.Error("TUI error", "error", err)
+				os.Exit(1)
+			}
+		}
+	},
+}
+
+var mcpCmd = &cobra.Command{
+	Use:   "mcp",
+	Short: "Start the foobar MCP server",
+	Long:  `Starts a Model Context Protocol (MCP) server over Standard I/O for AI clients like Claude and Cursor.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		ensureServerRunning()
+		handler := mcp.NewHandler(socketPath)
+		if err := handler.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)
+			os.Exit(1)
+		}
+	},
+}
+
 func init() {
+	runCmd.Flags().StringVarP(&runName, "name", "n", "", "Assign a name to the process")
+	runCmd.Flags().BoolVar(&runFg, "foreground", false, "Run in foreground (block terminal)")
+
 	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(debugCmd)
+	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(mcpCmd)
 }
 
 func main() {

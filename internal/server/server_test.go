@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -187,6 +188,34 @@ func TestServerE2E(t *testing.T) {
 		if !restarted {
 			p, _ := manager.GetProcess("dummy")
 			t.Errorf("expected process status running after restart, got %s", p.GetStatus())
+		}
+	})
+
+	// --- F. Test POST /processes/add
+	t.Run("POST /processes/add", func(t *testing.T) {
+		reqBody, _ := json.Marshal(AddProcessRequest{
+			Name:    "new_proc",
+			Command: "echo 'im new'",
+		})
+
+		resp, err := client.Post("http://unix/processes/add", "application/json", bytes.NewReader(reqBody))
+		if err != nil {
+			t.Fatalf("failed POST /processes/add: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			t.Errorf("expected 200 OK, got %d. Body: %s", resp.StatusCode, string(b))
+		}
+
+		time.Sleep(50 * time.Millisecond) // buffer for OS start
+		p, ok := manager.GetProcess("new_proc")
+		if !ok {
+			t.Fatalf("expected new_proc to be added to manager")
+		}
+		if p.GetStatus() != "stopped" && p.GetStatus() != "running" {
+			t.Errorf("expected process status running or stopped, got %s", p.GetStatus())
 		}
 	})
 }
